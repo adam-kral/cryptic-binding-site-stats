@@ -358,7 +358,7 @@ def process_pair(s1_pdb_code: str, s2_pdb_code: str, s1_chain_code: str, s2_chai
         # RMSD of the binding site (heavy atoms) (c_alpha atoms) (all carbon atoms)
         def get_rmsd(atoms1: List[Atom], atoms2: List[Atom]):
             return rmsd.kabsch_rmsd(np.array([a.get_coord() for a in atoms1]),
-                                    np.array([a.get_coord() for a in atoms2]))
+                                    np.array([a.get_coord() for a in atoms2]), translate=True)
 
         # heavy atoms
         bs_heavy_atoms__apo = list(filter(lambda a: a.element != 'H', binding_atoms__apo))
