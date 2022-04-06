@@ -433,6 +433,13 @@ def process_pair(s1_pdb_code: str, s2_pdb_code: str, s1_chain_code: str, s2_chai
 
         # METHOD 5
         # ((ligand superposition to the BS in apo, steric clashes?))
+        # steric clashes is not hard - a measure of that could be the sum of 'negative distances' of contacts between
+        # the ligand and the chain's atoms.
+
+        # however, this method is sensitive on the changes of the binding site configuration
+        # (say apo=closed, this would report the clashes, but if apo=open, this, depending on the protein structure,
+        # could detect some clashes too -- molecular dynamics would fix this.) When a person imagines that, they
+        # try to fit the ligand there too, as if doing the simulation. But
         # todo
 
         # (some methods work for the closing (1,2), others for the opening ([1],[2], 3, 4, 5, none for both probably)
