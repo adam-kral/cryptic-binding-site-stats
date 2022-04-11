@@ -192,15 +192,6 @@ def process_pair(s1_pdb_code: str, s2_pdb_code: str, s1_chain_code: str, s2_chai
                     f'is not X-RAY DIFFRACTION for a structure of the pair')
         return
 
-    # goes to serialization
-    result_dict = {
-        'apo_pdb_code': s1_pdb_code,
-        'holo_pdb_code': s2_pdb_code,
-        'apo_chain_id': s1_chain_code,
-        'holo_chain_id': s2_chain_code,
-        'binding_sites': [],
-    }
-
     apo = apo_parsed.structure
     apo_residue_id_mappings = apo_parsed.bio_to_mmcif_mappings
     apo_poly_seqs = apo_parsed.poly_seqs
@@ -218,6 +209,17 @@ def process_pair(s1_pdb_code: str, s2_pdb_code: str, s1_chain_code: str, s2_chai
 
     apo_mapping: BiopythonToMmcifResidueIds.Mapping = apo_residue_id_mappings[apo_chain.id]
     holo_mapping: BiopythonToMmcifResidueIds.Mapping = holo_residue_id_mappings[holo_chain.id]
+
+    # goes to serialization
+    result_dict = {
+        'apo_pdb_code': s1_pdb_code,
+        'holo_pdb_code': s2_pdb_code,
+        'apo_chain_id': s1_chain_code,
+        'holo_chain_id': s2_chain_code,
+        'apo_label_asym_id': apo_mapping.label_asym_id,
+        'holo_label_asym_id': holo_mapping.label_asym_id,
+        'binding_sites': [],
+    }
 
     apo_seq = apo_poly_seqs[apo_mapping.entity_poly_id]
     holo_seq = holo_poly_seqs[holo_mapping.entity_poly_id]
@@ -291,6 +293,25 @@ def process_pair(s1_pdb_code: str, s2_pdb_code: str, s1_chain_code: str, s2_chai
         result_binding_site = {
             'ligand': serialize_ligand(ligand),
             'residue_ids': list(binding_residues__holo.label_seq_ids),  # the holo label seq ids of course
+            # todo this or holo_label_seq_offset
+            # 'apo_residue_ids': list(binding_residues__holo.label_seq_ids),  # the holo label seq ids of course
+
+            # todo BS' atoms?, so we can visualize it in pymol?
+            # todo atoms of the analyses too? The blocking ones? (I reckon that would be generally all atoms in the vici
+            # nity of BS atoms (and potentially not the BS residues), so not necessarily blocking the binding pocket..
+
+            # todo ligand atoms/residues? (not important for visual inspection when we have the BS)
+
+            #  todo auth_seq_id incl. insertion codes
+            #   or not needed as I would provide the label_asym_id? But there is no documentation on the relationship
+            #   between that and auth_asym_id, so in case there are multiple lai for one aai (for AAs) this might be wrong
+            #   multiple aai for one lai is ok, as I compute with aai (biopython) and report aai/lai,
+            #   on the other hand, they say on auth_asym_id docs: `An alternative identifier for _atom_site.label_asym_id`
+            #   , if we follow the strict interpretation, that would be 1to1 w.r.t the residues sequence (which we know it is not e.g.
+            #   heteroresidues, but, ok, let's assume for the eternity is is true and never question it again.
+            # 'holo_auth_seq_residue_ids': list(binding_residues__holo.label_seq_ids),  # the holo label seq ids of course
+            # 'apo_auth_seq_residue_ids': list(binding_residues__holo.label_seq_ids),  # the holo label seq ids of course
+            # 'apo_residue_ids': list(binding_residues__holo.label_seq_ids),  # the holo label seq ids of course
             'analyses': {}
         }
         result_dict['binding_sites'].append(result_binding_site)
