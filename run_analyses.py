@@ -2,6 +2,7 @@
 
 import itertools
 import logging
+import sys
 from datetime import datetime
 from multiprocessing import Manager
 from pathlib import Path
@@ -23,10 +24,9 @@ from apo_holo_structure_stats import project_logger
 from apo_holo_structure_stats.core.analyses import get_defined_ligands
 from apo_holo_structure_stats.core.biopython_to_mmcif import BiopythonToMmcifResidueIds, BioResidueId
 from apo_holo_structure_stats.core.dataclasses import SetOfResidues
-from apo_holo_structure_stats.pipeline.make_pairs_lcs import LCSResult
+from apo_holo_structure_stats.pipeline.make_pairs_lcs import LCSResult, load_pairs_json, pairs_without_mismatches
 from apo_holo_structure_stats.pipeline.run_analyses import ConcurrentJSONAnalysisSerializer, plocal, \
-    assert_label_seq_id_contiguous, run_analyses_serial, run_analyses_multiprocess
-from apo_holo_structure_stats.pipeline.run_analyses_settings import NotXrayDiffraction
+    run_analyses_serial, run_analyses_multiprocess, get_seqs_range_and_offset
 
 from run_analyses_settings import BLOCKING_DISTANCE, BS_RADIUS
 
@@ -155,42 +155,13 @@ def serialize_ligand(ligand):
     raise NotImplementedError
 
 
-def get_seqs_range_and_offset(seq1: Dict[int, str], seq2: Dict[int, str], lcs_result: LCSResult):
-    # sanity check I forgot to do previously
-    for seq in (seq1, seq2):
-        try:
-            assert_label_seq_id_contiguous(list(seq.keys()))
-        except AssertionError:
-            logger.warning('ERROR, label_seq list is not contiguous as expected. What now?')
-            try:
-                assert_label_seq_id_contiguous(sorted(seq.keys()))
-            except AssertionError:
-                logger.warning('ERROR, even if sorted, label_seq list is not contiguous as expected. What now?')
-
-    def get_seq_range(seq, lcs_start):
-        seq_ids = list(seq.keys())
-        start = seq_ids[lcs_start]
-        return range(start, start + lcs_result.length + 1)
-
-    seq1_range = get_seq_range(seq1, lcs_result.i1)
-    seq2_range = get_seq_range(seq2, lcs_result.i2)
-    seq2_label_seq_id_offset = seq2_range[0] - seq1_range[0]
-    return seq1_range, seq2_range, seq2_label_seq_id_offset
-
-
 def process_pair(s1_pdb_code: str, s2_pdb_code: str, s1_chain_code: str, s2_chain_code: str,
                  lcs_result: LCSResult):
     pair = ((s1_pdb_code, s1_chain_code), (s2_pdb_code, s2_chain_code))
     logger.info(f'process_pair {pair}')
 
-    try:
-        apo_parsed = plocal.parse_mmcif(s1_pdb_code)
-        holo_parsed = plocal.parse_mmcif(s2_pdb_code)
-    except NotXrayDiffraction:
-        logger.exception('not x-ray diffraction')
-        logger.info(f'skipping pair {(s1_pdb_code, s2_pdb_code)}: exp. method '
-                    f'is not X-RAY DIFFRACTION for a structure of the pair')
-        return
+    apo_parsed = plocal.parse_mmcif(s1_pdb_code)
+    holo_parsed = plocal.parse_mmcif(s2_pdb_code)
 
     apo = apo_parsed.structure
     apo_residue_id_mappings = apo_parsed.bio_to_mmcif_mappings
@@ -235,10 +206,6 @@ def process_pair(s1_pdb_code: str, s2_pdb_code: str, s1_chain_code: str, s2_chai
     #  - pak udelat metacentrum skript (zkopirovat ten jiny? Nebo jen pridat parametr mozna staci.., zkopirovat - rychlejsiú
     #       - nakonec spustit (ale nektery neprobehnou kvuli pretizeni pipu)
 
-    # get the ligand(s)
-    ligands = list(get_defined_ligands(holo, holo_chain))
-    assert len(ligands) > 0  # otherwise wouldn't be holo (as I leave the same LigandSpec)
-
     # # up to this point, we have residue ids of the protein sequence in the experiment. This also includes unobserved
     # # residues, but those we will exclude from our analysis as their positions weren't determined
     # c1_residues, c1_label_seq_ids, c2_residues, c2_label_seq_ids = get_observed_residues(
@@ -258,6 +225,9 @@ def process_pair(s1_pdb_code: str, s2_pdb_code: str, s1_chain_code: str, s2_chai
 
     holo_chain = SetOfResiduesIndexable.from_label_seq_ids(holo_mapping.label_seq_id__to__bio_pdb.keys(), holo_mapping,
                                                              holo_chain)
+    # get the ligand(s)
+    ligands = list(get_defined_ligands(holo, holo_chain))
+    assert len(ligands) > 0  # otherwise wouldn't be holo (as I leave the same LigandSpec)
 
     for ligand in ligands:
         # todo serialize the ligand?
@@ -615,6 +585,12 @@ def main():
     start_datetime = datetime.now()
     analyses_output_fpath = Path(f'output_apo_holo_{start_datetime.isoformat()}.json')
 
+    potential_pairs = load_pairs_json(args.pairs_json)
+    if potential_pairs.empty:
+        logger.warning('Input json contains no records.')
+        sys.exit(0)
+    pairs = pairs_without_mismatches(potential_pairs)
+
     with Manager() as multiprocessing_manager:
         # get analyzers as configured
         # p = configure_pipeline(multiprocessing_manager)
@@ -626,7 +602,7 @@ def main():
 
         # run_analyses_multiprocess(args.pairs_json, process_pair_with_exc_handling, args.workers, worker_initializer,
         #                           worker_initializer_args)
-        run_analyses_serial(args.pairs_json, process_pair_with_exc_handling, worker_initializer,
+        run_analyses_serial(pairs, process_pair_with_exc_handling, worker_initializer,
                                   worker_initializer_args)
 
         serializer.dump_data()

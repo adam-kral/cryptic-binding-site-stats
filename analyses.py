@@ -4,8 +4,10 @@ from pathlib import Path
 from apo_holo_structure_stats.core.analyses import GetChains, GetCAlphaCoords, GetCentroid, GetCenteredCAlphaCoords, \
     GetRotationMatrix, GetHingeAngle, GetRMSD, GetSecondaryStructureForStructure, CompareSecondaryStructure, \
     GetDomainsForStructure, GetSASAForStructure, GetInterfaceBuriedArea
-from apo_holo_structure_stats.pipeline.run_analyses_settings import SavedAnalysis, dotdict, mulproc_lru_cache, \
-    parse_mmcif_exp_method_hack, simplify_args_decorator
+from apo_holo_structure_stats.pipeline.run_analyses_settings import SavedAnalysis, mulproc_lru_cache, \
+     simplify_args_decorator
+
+from apo_holo_structure_stats.input.download import parse_mmcif as parse_mmcif_fn
 
 
 def configure_pipeline(manager, input_dir: Path):
@@ -15,14 +17,8 @@ def configure_pipeline(manager, input_dir: Path):
     #     for cache in caches:
     #         cache.cache_clear()
 
-
-
-    # todo delete this
-    #  need to skip non-xray now (we still have old data unskipped in `filter_structures`)
-    not_xray = manager.dict()
-    # parse_mmcif = mulproc_lru_cache(partial(parse_mmcif_exp_method_hack, not_xray), manager, max_size=2)
-    parse_mmcif = lru_cache(maxsize=3)(simplify_args_decorator(partial(parse_mmcif_exp_method_hack, {})))
-    # parse_mmcif = mulproc_lru_cache(partial(parse_mmcif, allow_download=False), manager, max_size=2)
+    # parse_mmcif = mulproc_lru_cache(partial(parse_mmcif_fn, allow_download=False), manager, max_size=2)
+    parse_mmcif = lru_cache(maxsize=3)(parse_mmcif_fn)
 
     get_chains = GetChains()
 
